@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { Component, renderToString } from '@wordpress/element';
+import { Component } from '@wordpress/element';
 
 export default class Sandbox extends Component {
 	constructor() {
@@ -82,112 +82,22 @@ export default class Sandbox extends Component {
 			return;
 		}
 
-		// sandboxing video content needs to explicitly set the height of the sandbox
-		// based on a 16:9 ratio for the content to be responsive
-		const heightCalculation = 'video' === this.props.type ? 'clientBoundingRect.width / 16 * 9' : 'clientBoundingRect.height';
-
-		const observeAndResizeJS = `
-			( function() {
-				var observer;
-
-				if ( ! window.MutationObserver || ! document.body || ! window.parent ) {
-					return;
-				}
-
-				function sendResize() {
-					var clientBoundingRect = document.body.getBoundingClientRect();
-					window.parent.postMessage( {
-						action: 'resize',
-						width: clientBoundingRect.width,
-						height: ${ heightCalculation }
-					}, '*' );
-				}
-
-				observer = new MutationObserver( sendResize );
-				observer.observe( document.body, {
-					attributes: true,
-					attributeOldValue: false,
-					characterData: true,
-					characterDataOldValue: false,
-					childList: true,
-					subtree: true
-				} );
-
-				window.addEventListener( 'load', sendResize, true );
-
-				// Hack: Remove viewport unit styles, as these are relative
-				// the iframe root and interfere with our mechanism for
-				// determining the unconstrained page bounds.
-				function removeViewportStyles( ruleOrNode ) {
-					[ 'width', 'height', 'minHeight', 'maxHeight' ].forEach( function( style ) {
-						if ( /^\\d+(vmin|vmax|vh|vw)$/.test( ruleOrNode.style[ style ] ) ) {
-							ruleOrNode.style[ style ] = '';
-						}
-					} );
-				}
-
-				Array.prototype.forEach.call( document.querySelectorAll( '[style]' ), removeViewportStyles );
-				Array.prototype.forEach.call( document.styleSheets, function( stylesheet ) {
-					Array.prototype.forEach.call( stylesheet.cssRules || stylesheet.rules, removeViewportStyles );
-				} );
-
-				document.body.style.position = 'absolute';
-				document.body.style.width = '100%';
-				document.body.setAttribute( 'data-resizable-iframe-connected', '' );
-
-				sendResize();
-		} )();`;
-
-		const style = `
-			body {
-				margin: 0;
-			}
-			
-			body.html {
-				width: 100%;
-			}
-
-			body.video,
-			body.video > div,
-			body.video > div > iframe {
-				width: 100%;
-				height: 100%;
-			}
-
-			body > div > * {
-				margin-top: 0 !important;	/* has to have !important to override inline styles */
-				margin-bottom: 0 !important;
-			}
-		`;
-
-		// put the html snippet into a html document, and then write it to the iframe's document
-		// we can use this in the future to inject custom styles or scripts
-		const htmlDoc = (
-			<html lang={ document.documentElement.lang }>
-				<head>
-					<title>{ this.props.title }</title>
-					<style dangerouslySetInnerHTML={ { __html: style } } />
-				</head>
-				<body data-resizable-iframe-connected="data-resizable-iframe-connected" className={ this.props.type }>
-					<div id="content" dangerouslySetInnerHTML={ { __html: this.props.html } } />
-					<script type="text/javascript" dangerouslySetInnerHTML={ { __html: observeAndResizeJS } } />
-
-				</body>
-			</html>
-		);
-
 		// writing the document like this makes it act in the same way as if it was
 		// loaded over the network, so DOM creation and mutation, script execution, etc.
 		// all work as expected
 		this.iframe.contentWindow.document.open();
-		this.iframe.contentWindow.document.write( '<!DOCTYPE html>' + renderToString( htmlDoc ) );
+		this.iframe.contentWindow.document.write( '<!DOCTYPE html>' + this.props.html );
 		this.iframe.contentWindow.document.close();
 	}
 
 	static get defaultProps() {
 		return {
 			html: '',
-			title: '',
+			title: function() {
+				return function() {
+					return ( 'mustNotBeBlank-' + new Date().getUTCMilliseconds() );
+				};
+			},
 		};
 	}
 
